@@ -1,0 +1,26 @@
+{
+  "name": "auth-backend",
+  "version": "1.0.0",
+  "description": "backend part for raintech auth",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://millerrabin@bitbucket.org/raintechteam/auth-backend.git"
+  },
+  "author": "Miller Rabin",
+  "license": "ISC",
+  "homepage": "https://bitbucket.org/raintechteam/auth-backend#readme",
+  "dependencies": {
+    "koa": "^2.5.1",
+    "koa-body": "^4.0.4",
+    "koa-router": "^7.4.0",
+    "koa-static": "^5.0.0",
+    "koa2-cors": "^2.0.5",
+    "moment": "^2.22.2",
+    "node-rsa": "^1.0.0",
+    "pg": "^7.4.3"
+  }
+}
