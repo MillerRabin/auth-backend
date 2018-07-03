@@ -29,7 +29,7 @@ exports.commonName = 'auth.raintech.su';
 exports.useHttp2 = false;
 exports.allowEveryone = false;
 
-exports.port = process.env.PORT | 8099;
+exports.port = process.env.PORT | 8093;
 
 exports.settings = exports.production ? productionSettings : developSettings;
 
