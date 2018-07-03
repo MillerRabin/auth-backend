@@ -4,8 +4,9 @@ create extension postgis;
 
 create table users (
     id uuid primary key default gen_random_uuid(),
-    nick_name varchar(320) not null,
-    email varchar(320) not null,
+    nick_name varchar(32) not null,
+    email varchar(64) not null,
+    login varchar(32) not null,
     phone bigint not null,
     create_time timestamp with time zone not null default now(),
     update_time timestamp with time zone not null default now(),
@@ -81,3 +82,5 @@ insert into user_access (r_user, access)
 select u.id, g.id
 from users u, groups g
 where u.email = 'millerrabin@raintech.su' and g.name = 'top.ci.admin';
+
+update users set login = 'millerrabin' where email = 'millerrabin@raintech.su';

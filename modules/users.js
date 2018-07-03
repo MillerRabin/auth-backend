@@ -12,14 +12,16 @@ exports.getUser = (connection, query) => {
     const where = [];
     if (query.email != null) where.push('email = $' + params.push(query.email));
     if (query.phone != null) where.push('phone = $' + params.push(query.phone));
+    if (query.login != null) where.push('login = $' + params.push(query.login));
     if (query.id != null) where.push('id = $' + params.push(query.id));
     if (query.password != null) where.push(`password = crypt($${ params.push(query.password) }, password)`);
-    if (query.first_name != null) where.push(`(lower(first_name) = $${params.push(query.first_name) })`);
-    if (query.last_name != null) where.push(`(lower(last_name) = $${params.push(query.last_name) })`);
+
     if (params.length == 0) throw new response.Error({ text: 'There are no valid parameters'});
+
+    const fields = ['id', 'email', 'login', 'phone', 'skype' ];
     const dbQuery = {
-        text: 'select id, email, first_name, last_name, phone, skype, ' +
-        'reg_time, can_modify_materials from users where ' + where.join(' and '),
+        text: `select ${ fields.join(', ')}` +
+              'from users where ' + where.join(' and '),
         values: params,
         rowMode: 'array'
     };
@@ -27,14 +29,14 @@ exports.getUser = (connection, query) => {
 };
 
 exports.getIp = (request) => {
-    let str = request.headers['x-real-ip'] || request.ip;
-    let rip = new RegExp("\\[([0-9a-f:]+)\]:([0-9]{1,5})");
-    let res = str.match(rip);
-    if (res != null) return res[1];
+    const str = request.headers['x-real-ip'] || request.ip;
+    const rip = new RegExp("\\[([0-9a-f:]+)\]:([0-9]{1,5})");
+    const ipv6 = str.match(rip);
+    if (ipv6 != null) return ipv6[1];
 
-    let ripv4 = new RegExp("([0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}):([0-9]{1,5})");
-    res = str.match(ripv4);
-    if (res != null) return res[1];
+    const ripv4 = new RegExp("([0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}):([0-9]{1,5})");
+    const ipv4 = str.match(ripv4);
+    if (ipv4 != null) return ipv4[1];
     return str;
 };
 
@@ -96,20 +98,19 @@ async function getUserByCertificate(connection, request) {
     return await exports.authenticateUser(connection, user, request, session.type);
 }
 
-exports.login = async (connection, params) => {
-    let eobj = { login: 'Ваш пароль неверен, либо такого пользователя не существует'};
+exports.byPassword = async (connection, params) => {
+    const eobj = { login: 'Ваш пароль неверен, либо такого пользователя не существует'};
     if (params.password == null) throw new response.Error(eobj);
-    if (params.email == null)
-        throw new response.Error(eobj);
+    const qobj = {};
 
-    let qobj = (valid.email(params.email)) ? { email: params.email.toLowerCase()} :
-        (valid.phone(params.email)) ? { phone: params.email } :
-            null;
+    if (valid.email(params.email)) qobj.email = params.email.toLowerCase();
+    if (valid.login(params.login)) qobj.login = params.login.toLowerCase();
+    if (valid.phone(params.login)) qobj.phone = params.phone.toLowerCase();
 
-    if (qobj == null) throw new response.Error(eobj);
-    if (!config.allowEveryone)
-        qobj.password = params.password;
-    const user = await exports.getUser(connection, qobj, true);
+    if (Object.keys(qobj).length == 0) throw new response.Error(eobj);
+
+    qobj.password = (config.allowEveryone) ? null : params.password;
+    const user = await exports.getUser(connection, qobj);
     if (user.rows.length == 0) throw new response.Error(eobj);
     return user;
 };
@@ -136,11 +137,11 @@ exports.logAuth = async (connection, params) => {
 exports.addController = (application, controllerName) => {
     const router = new Router();
 
-    router.post('/' + controllerName + '/login', koaBody(), async (ctx) => {
+    router.post('/' + controllerName + '/bypassword', koaBody(), async (ctx) => {
         async function postUser(connection, user) {
             if ((user.password == null) && (user.certificate != null))
                 return await getUserByCertificate(connection, ctx.request);
-            const res = await exports.login(connection, user);
+            const res = await exports.byPassword(connection, user);
             return await exports.authenticateUser(connection, res, ctx.request);
         }
 

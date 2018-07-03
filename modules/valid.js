@@ -1,13 +1,21 @@
-exports.email = function(str, field, errors) {
-    if (str == null) {
-        if ((field == null) || (errors == null)) return false;
-        errors[field] = 'Please provide your e-mail address';
+const safe = require('./safe.js');
+
+exports.email = function(params) {
+    params.errors = (params.errors == null) ? {} : params.errors;
+    params.field = safe.isEmpty(params.field) ? 'email' : params.field;
+    if ((typeof(params.value) != 'string') || (params.value.length > 32)) {
+        params.errors[params.field] = 'Please provide your e-mail address';
         return false;
     }
-    let sa = str.split('@');
+
+    if (params.value.length > 32) {
+        params.errors[params.field] = 'The email is longer than 32 symbols';
+        return false;
+    }
+
+    const sa = params.value.split('@');
     if (sa.length != 2) {
-        if ((field == null) || (errors == null)) return false;
-        errors[field] = 'The email is incorrect';
+        params.errors[params.field] = 'The email is incorrect';
         return false;
     }
     return true;
@@ -51,15 +59,48 @@ exports.phone = function(phone) {
     return pi >= 1000000;
 };
 
-exports.password = (str, field, errors) => {
-    if ((str == null) || (str == '')) {
-        if ((errors == null) || (field == null)) return false;
-        errors[field] = 'Please, provide your password';
+exports.password = (params) => {
+    params.errors = (params.errors == null) ? {} : params.errors;
+    params.field = safe.isEmpty(params.field) ? 'password' : params.field;
+    if (typeof(params.value) != 'string') {
+        params.errors[params.field] = 'Please provide your password';
         return false;
     }
-    if (str.length < 6) {
-        if ((errors == null) || (field == null)) return false;
-        errors[field] = 'The password must be 6 o more symbols';
+
+    if (safe.isEmpty(params.value)) {
+        params.errors[params.field] = 'Please provide your password';
+        return false;
+    }
+
+    const length = params.value.length;
+    if (length < 6) {
+        params.errors[params.field] = 'The password is less than 6 symbols';
+        return false;
+    }
+
+    if (length >32) {
+        params.errors[params.field] = 'The password is longer than 32 symbols';
+        return false;
+    }
+
+    return true;
+};
+
+exports.login = (params) => {
+    params.errors = (params.errors == null) ? {} : params.errors;
+    params.field = safe.isEmpty(params.field) ? 'login' : params.field;
+    if (typeof(params.value) != 'string') {
+        params.errors[params.field] = 'Please provide your login';
+        return false;
+    }
+
+    if (safe.isEmpty(params.value)) {
+        params.errors[params.field] = 'Please provide your login';
+        return false;
+    }
+
+    if (params.value.length > 32) {
+        params.errors[params.field] = 'The login is longer than 32 symbols';
         return false;
     }
     return true;

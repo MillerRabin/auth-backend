@@ -27,6 +27,7 @@ if (exports.production == null)
 
 exports.commonName = 'auth.raintech.su';
 exports.useHttp2 = false;
+exports.allowEveryone = false;
 
 exports.port = process.env.PORT | 8099;
 
