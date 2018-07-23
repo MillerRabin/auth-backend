@@ -27,6 +27,9 @@ create table users (
     mail_code int
 );
 
+CREATE INDEX users_private ON users USING GIN (private_data);
+CREATE INDEX users_public ON users USING GIN (public_data);
+
 create table user_access (
     id bigserial primary key,
     r_user uuid not null,
@@ -79,8 +82,10 @@ insert into users (nick_name, email, phone, password) values ('Miller Rabin', 'm
     crypt('ifyouwanttohave', gen_salt('md5')));
 
 insert into user_access (r_user, access)
-select u.id, g.id
+select u.id, g.id.
 from users u, groups g
 where u.email = 'millerrabin@raintech.su' and g.name = 'top.ci.admin';
 
-update users set login = 'millerrabin' where email = 'millerrabin@raintech.su';
+update users set private_data = '{ "ci.raintech.su": {} }' where email = 'millerrabin@raintech.su';
+
+select * from users where private_data ? 'ci.raintech.su';

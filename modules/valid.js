@@ -51,9 +51,12 @@ exports.isDate = function(item) {
     return item.constructor == Date;
 };
 
-exports.phone = function(phone) {
-    let pi = parseInt(phone);
+exports.phone = function(params) {
+    params.errors = (params.errors == null) ? {} : params.errors;
+    params.field = safe.isEmpty(params.field) ? 'phone' : params.field;
+    const pi = Number(params.value);
     if (isNaN(pi)) {
+        params.errors[params.field] = 'Incorrect phone';
         return false;
     }
     return pi >= 1000000;

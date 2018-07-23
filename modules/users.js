@@ -7,23 +7,30 @@ const response = require('../middlewares/response.js');
 const config = require('../config.js');
 const db = require('./postgres.js');
 
-exports.getUser = (connection, query) => {
+exports.getUser = ({ connection, query, includePrivate, rowMode = 'array'}) => {
     const params = [];
     const where = [];
+    const fields = ['id', 'login', 'public_data' ];
+    if (includePrivate) fields.push('phone', 'skype', 'email');
     if (query.email != null) where.push('email = $' + params.push(query.email));
     if (query.phone != null) where.push('phone = $' + params.push(query.phone));
     if (query.login != null) where.push('login = $' + params.push(query.login));
     if (query.id != null) where.push('id = $' + params.push(query.id));
-    if (query.password != null) where.push(`password = crypt($${ params.push(query.password) }, password)`);
-
+    if (query.password != null) {
+        where.push(`password = crypt($${ params.push(query.password) }, password)`);
+    }
+    if (query.referer != null) {
+        where.push(`private_data ? $${ params.push(query.referer )}`);
+        fields.push(`private_data->'${query.referer}' private_data `);
+    }
     if (params.length == 0) throw new response.Error({ text: 'There are no valid parameters'});
 
-    const fields = ['id', 'email', 'login', 'phone', 'skype' ];
+
     const dbQuery = {
-        text: `select ${ fields.join(', ')}` +
+        text: `select ${ fields.join(', ')} ` +
               'from users where ' + where.join(' and '),
         values: params,
-        rowMode: 'array'
+        rowMode: rowMode
     };
     return connection.query(dbQuery);
 };
@@ -93,24 +100,23 @@ exports.checkSession = (request, userName) => {
 
 async function getUserByCertificate(connection, request) {
     const session = exports.checkSession(request);
-    const user = await exports.getUser(connection, { id: session.userId });
+    const user = await exports.getUser({ connection, query: { id: session.userId }, includePrivate: true });
     if (user.rows.length == 0) throw new response.Error({ text: 'Certificate is invalid' });
     return await exports.authenticateUser(connection, user, request, session.type);
 }
 
 exports.byPassword = async (connection, params) => {
-    const eobj = { login: 'Ваш пароль неверен, либо такого пользователя не существует'};
+    const eobj = { login: 'Wrong login or password'};
     if (params.password == null) throw new response.Error(eobj);
     const qobj = {};
 
-    if (valid.email(params.email)) qobj.email = params.email.toLowerCase();
-    if (valid.login(params.login)) qobj.login = params.login.toLowerCase();
-    if (valid.phone(params.login)) qobj.phone = params.phone.toLowerCase();
-
+    if (valid.email({ value: params.email })) qobj.email = params.email.toLowerCase();
+    if (valid.login({ value: params.login })) qobj.login = params.login.toLowerCase();
+    if (valid.phone({ value: params.phone })) qobj.phone = params.phone.toLowerCase();
+    if (params.referer != null) qobj.referer = params.referer;
     if (Object.keys(qobj).length == 0) throw new response.Error(eobj);
-
     qobj.password = (config.allowEveryone) ? null : params.password;
-    const user = await exports.getUser(connection, qobj);
+    const user = await exports.getUser({ connection, query: qobj, includePrivate: true});
     if (user.rows.length == 0) throw new response.Error(eobj);
     return user;
 };
@@ -137,7 +143,7 @@ exports.logAuth = async (connection, params) => {
 exports.addController = (application, controllerName) => {
     const router = new Router();
 
-    router.post('/' + controllerName + '/bypassword', koaBody(), async (ctx) => {
+    router.post('/' + controllerName + '/login/bypassword', koaBody(), async (ctx) => {
         async function postUser(connection, user) {
             if ((user.password == null) && (user.certificate != null))
                 return await getUserByCertificate(connection, ctx.request);
@@ -146,6 +152,8 @@ exports.addController = (application, controllerName) => {
         }
 
         const user = ctx.request.body;
+        const headers = ctx.req.headers;
+        user.referer = (user.referer == null) ? headers.referer : user.referer;
         const connection = await application.pool.connect();
         try {
             return await postUser(connection, user);
