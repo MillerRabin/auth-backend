@@ -7,21 +7,21 @@ const response = require('../middlewares/response.js');
 const config = require('../config.js');
 const db = require('./postgres.js');
 
-exports.getUser = ({ connection, query, includePrivate, rowMode = 'array'}) => {
+exports.getUser = ({ connection, user, includePrivate, rowMode = 'array'}) => {
     const params = [];
     const where = [];
     const fields = ['id', 'login', 'public_data' ];
     if (includePrivate) fields.push('phone', 'skype', 'email');
-    if (query.email != null) where.push('email = $' + params.push(query.email));
-    if (query.phone != null) where.push('phone = $' + params.push(query.phone));
-    if (query.login != null) where.push('login = $' + params.push(query.login));
-    if (query.id != null) where.push('id = $' + params.push(query.id));
-    if (query.password != null) {
-        where.push(`password = crypt($${ params.push(query.password) }, password)`);
+    if (user.email != null) where.push('email = $' + params.push(user.email));
+    if (user.phone != null) where.push('phone = $' + params.push(user.phone));
+    if (user.login != null) where.push('login = $' + params.push(user.login));
+    if (user.id != null) where.push('id = $' + params.push(user.id));
+    if (user.password != null) {
+        where.push(`password = crypt($${ params.push(user.password) }, password)`);
     }
-    if (query.referer != null) {
-        where.push(`private_data ? $${ params.push(query.referer )}`);
-        fields.push(`private_data->'${query.referer}' private_data `);
+    if (user.referer != null) {
+        where.push(`private_data ? $${ params.push(user.referer )}`);
+        fields.push(`private_data->'${user.referer}' private_data `);
     }
     if (params.length == 0) throw new response.Error({ text: 'There are no valid parameters'});
 
@@ -32,7 +32,7 @@ exports.getUser = ({ connection, query, includePrivate, rowMode = 'array'}) => {
         values: params,
         rowMode: rowMode
     };
-    return connection.query(dbQuery);
+    return connection.user(dbQuery);
 };
 
 exports.getIp = (request) => {
@@ -50,13 +50,8 @@ exports.getIp = (request) => {
 exports.authenticateUser = async (connection, user, request) => {
     const cobj = {};
     cobj.ip = exports.getIp(request);
-    cobj.email = db.getData(user, 0, 'email');
-    cobj.phone = db.getData(user, 0, 'phone');
-    cobj.firstName = db.getData(user, 0, 'first_name');
-    cobj.lastName = db.getData(user, 0, 'last_name');
     cobj.userId = db.getData(user, 0, 'id');
     cobj.userAgent = request.headers['user-agent'];
-    cobj.canModifyMaterials = db.getData(user, 0, 'can_modify_materials');
     const cert = certificate.issue(cobj);
     await exports.updateLastTime(connection, cobj.userId);
     await exports.logAuth(connection, {
@@ -105,20 +100,57 @@ async function getUserByCertificate(connection, request) {
     return await exports.authenticateUser(connection, user, request, session.type);
 }
 
-exports.byPassword = async (connection, params) => {
+exports.byPassword = async ({ connection, user, rowMode = 'array' }) => {
     const eobj = { login: 'Wrong login or password'};
-    if (params.password == null) throw new response.Error(eobj);
+    if (user.password == null) throw new response.Error(eobj);
     const qobj = {};
-
-    if (valid.email({ value: params.email })) qobj.email = params.email.toLowerCase();
-    if (valid.login({ value: params.login })) qobj.login = params.login.toLowerCase();
-    if (valid.phone({ value: params.phone })) qobj.phone = params.phone.toLowerCase();
-    if (params.referer != null) qobj.referer = params.referer;
+    if (valid.email({ value: user.email })) qobj.email = user.email.toLowerCase();
+    if (valid.login({ value: user.login })) qobj.login = user.login.toLowerCase();
+    if (valid.phone({ value: user.phone })) qobj.phone = user.phone.toLowerCase();
     if (Object.keys(qobj).length == 0) throw new response.Error(eobj);
-    qobj.password = (config.allowEveryone) ? null : params.password;
-    const user = await exports.getUser({ connection, query: qobj, includePrivate: true});
-    if (user.rows.length == 0) throw new response.Error(eobj);
-    return user;
+    if (user.referer != null) qobj.referer = user.referer;
+    qobj.password = (config.allowEveryone) ? null : user.password;
+    const rUser = await exports.getUser({ connection, query: qobj, includePrivate: true, rowMode });
+    if (rUser.rows.length == 0) throw new response.Error(eobj);
+    return rUser;
+};
+
+exports.add = async ({ connection, user }) => {
+    const params = [];
+    const fields = [];
+    const vals = [];
+    if (user.email != null) {
+        fields.push('email');
+        vals.push('$' + params.push(user.email));
+    }
+
+    if (user.nick_name != null) {
+        fields.push('nick_name');
+        vals.push('$' + params.push(user.nickName));
+    }
+
+    if (user.phone != null) {
+        fields.push('phone');
+        vals.push('$' + params.push(user.phone));
+    }
+
+    if (user.password != null) {
+        fields.push('password');
+        vals.push(`crypt($${ params.push(user.password) }, gen_salt('md5'))`);
+    }
+
+    if (user.referer != null) {
+        fields.push('private_data');
+        const privateData = {};
+        privateData[user.referer] = {};
+        vals.push('$' + params.push(privateData));
+    }
+
+    const dbQuery = {
+        text: `insert into users (${ fields.join(', ')}) values (${ vals.join(', ')}) returning id`,
+        values: params
+    };
+    return connection.query(dbQuery);
 };
 
 exports.logAuth = async (connection, params) => {
@@ -140,6 +172,19 @@ exports.logAuth = async (connection, params) => {
     await connection.query(insertQuery, dbparams);
 };
 
+exports.signup = async ({ connection, user }) => {
+    const rUser = Object.assign(user);
+    delete rUser.referer;
+    const [sUser] = await exports.byPassword({ connection, rUser, rowMode: 'json' });
+    if (sUser == null)
+        return db.formatResponse(await exports.add({ connection, user }));
+    const pData = sUser.private_data;
+    const rObj = { id: sUser.id };
+    if (pData[user.referer] != null) return rObj;
+    pData[user.referer] = {};
+    return rObj;
+};
+
 exports.addController = (application, controllerName) => {
     const router = new Router();
 
@@ -147,7 +192,7 @@ exports.addController = (application, controllerName) => {
         async function postUser(connection, user) {
             if ((user.password == null) && (user.certificate != null))
                 return await getUserByCertificate(connection, ctx.request);
-            const res = await exports.byPassword(connection, user);
+            const res = await exports.byPassword({ connection, user });
             return await exports.authenticateUser(connection, res, ctx.request);
         }
 
@@ -157,6 +202,18 @@ exports.addController = (application, controllerName) => {
         const connection = await application.pool.connect();
         try {
             return await postUser(connection, user);
+        } finally {
+            await connection.release();
+        }
+    });
+
+    router.post('/' + controllerName + '/signup/bypassword', koaBody(), async (ctx) => {
+        const user = ctx.request.body;
+        const headers = ctx.req.headers;
+        user.referer = (user.referer == null) ? headers.referer : user.referer;
+        const connection = await application.pool.connect();
+        try {
+            return await exports.signup({ connection, user});
         } finally {
             await connection.release();
         }
