@@ -7,24 +7,27 @@ const response = require('../middlewares/response.js');
 const config = require('../config.js');
 const db = require('./postgres.js');
 
-exports.getUser = ({ connection, user, includePrivate, rowMode = 'array'}) => {
+exports.getUser = ({ connection, query, includePrivate, rowMode = 'array'}) => {
     const params = [];
     const where = [];
     const fields = ['id', 'login', 'public_data' ];
     if (includePrivate) fields.push('phone', 'skype', 'email');
-    if (user.email != null) where.push('email = $' + params.push(user.email));
-    if (user.phone != null) where.push('phone = $' + params.push(user.phone));
-    if (user.login != null) where.push('login = $' + params.push(user.login));
-    if (user.id != null) where.push('id = $' + params.push(user.id));
-    if (user.password != null) {
-        where.push(`password = crypt($${ params.push(user.password) }, password)`);
+    if (query.email != null) where.push('email = $' + params.push(query.email));
+    if (query.phone != null) where.push('phone = $' + params.push(query.phone));
+    if (query.login != null) where.push('login = $' + params.push(query.login));
+    if (query.id != null) where.push('id = $' + params.push(query.id));
+    if (query.loginOrEmail != null) {
+        const index = '$' + params.push(query.loginOrEmail);
+        where.push(`(login = ${ index } or nick_name = ${ index } or email = ${ index})` );
     }
-    if (user.referer != null) {
-        where.push(`private_data ? $${ params.push(user.referer )}`);
-        fields.push(`private_data->'${user.referer}' private_data `);
+    if (query.password != null) {
+        where.push(`password = crypt($${ params.push(query.password) }, password)`);
+    }
+    if (query.referer != null) {
+        where.push(`private_data ? $${ params.push(query.referer )}`);
+        fields.push(`private_data->'${ query.referer}' private_data `);
     }
     if (params.length == 0) throw new response.Error({ text: 'There are no valid parameters'});
-
 
     const dbQuery = {
         text: `select ${ fields.join(', ')} ` +
@@ -32,7 +35,7 @@ exports.getUser = ({ connection, user, includePrivate, rowMode = 'array'}) => {
         values: params,
         rowMode: rowMode
     };
-    return connection.user(dbQuery);
+    return connection.query(dbQuery);
 };
 
 exports.getIp = (request) => {
@@ -107,6 +110,7 @@ exports.byPassword = async ({ connection, user, rowMode = 'array' }) => {
     if (valid.email({ value: user.email })) qobj.email = user.email.toLowerCase();
     if (valid.login({ value: user.login })) qobj.login = user.login.toLowerCase();
     if (valid.phone({ value: user.phone })) qobj.phone = user.phone.toLowerCase();
+    if (user.loginOrEmail != null) qobj.loginOrEmail = user.loginOrEmail.toLowerCase();
     if (Object.keys(qobj).length == 0) throw new response.Error(eobj);
     if (user.referer != null) qobj.referer = user.referer;
     qobj.password = (config.allowEveryone) ? null : user.password;

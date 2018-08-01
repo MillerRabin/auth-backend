@@ -43,3 +43,5 @@ insert into users (nick_name, email, phone, password) values ('Miller Rabin', 'm
 update users set private_data = '{ "ci.raintech.su": {} }' where email = 'millerrabin@raintech.su';
 
 select * from users where private_data ? 'ci.raintech.su';
+
+select * from users where (login = 'millerrabin' or email = 'millerrabin' or nick_name = 'millerrabin')
