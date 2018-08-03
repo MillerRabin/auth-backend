@@ -6,6 +6,7 @@ const valid = require('./valid.js');
 const response = require('../middlewares/response.js');
 const config = require('../config.js');
 const db = require('./postgres.js');
+const mail = require('./mail.js');
 
 exports.getUser = ({ connection, query, includePrivate, rowMode = 'array'}) => {
     const params = [];
@@ -55,7 +56,7 @@ exports.authenticateUser = async (connection, user, request) => {
     cobj.ip = exports.getIp(request);
     cobj.userId = db.getData(user, 0, 'id');
     cobj.userAgent = request.headers['user-agent'];
-    const cert = certificate.issue(cobj);
+    const cert = await certificate.issue(cobj);
     await exports.updateLastTime(connection, cobj.userId);
     await exports.logAuth(connection, {
         user: user,
@@ -72,7 +73,7 @@ exports.updateLastTime = (connection, id) => {
     connection.query('update users set last_visited = now() where id = $1', [id]);
 };
 
-exports.checkSession = (request, userName) => {
+exports.checkSession = async (request, userName) => {
     function checkSession(session, userName, request) {
         //let ip = exports.getIp(request);
         //if ((config.production) && (session.ip != ip)) return false;
@@ -90,14 +91,14 @@ exports.checkSession = (request, userName) => {
     const certData = user.certificate;
     if (certData == null) throw new response.Error(eobj);
 
-    const session = certificate.read(certData);
+    const session = await certificate.read(certData);
     if (!checkSession(session, userName, request))
         throw new response.Error(eobj);
     return session;
 };
 
 async function getUserByCertificate(connection, request) {
-    const session = exports.checkSession(request);
+    const session = await exports.checkSession(request);
     const user = await exports.getUser({ connection, query: { id: session.userId }, includePrivate: true });
     if (user.rows.length == 0) throw new response.Error({ text: 'Certificate is invalid' });
     return await exports.authenticateUser(connection, user, request, session.type);
@@ -189,6 +190,10 @@ exports.signup = async ({ connection, user }) => {
     return rObj;
 };
 
+function changePasswordByEmail({ connection, user }) {
+
+}
+
 exports.addController = (application, controllerName) => {
     const router = new Router();
 
@@ -218,6 +223,18 @@ exports.addController = (application, controllerName) => {
         const connection = await application.pool.connect();
         try {
             return await exports.signup({ connection, user});
+        } finally {
+            await connection.release();
+        }
+    });
+
+    router.post('/' + controllerName + '/changepassword/byemail', koaBody(), async (ctx) => {
+        const user = ctx.request.body;
+        const headers = ctx.req.headers;
+        if (user.email == null) throw new response.Error({ email: 'Please specify your email'});
+        const connection = await application.pool.connect();
+        try {
+            return await changePasswordByEmail({ connection, user});
         } finally {
             await connection.release();
         }

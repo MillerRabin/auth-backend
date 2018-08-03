@@ -19,8 +19,11 @@
     "koa-router": "^7.4.0",
     "koa-static": "^5.0.0",
     "koa2-cors": "^2.0.5",
+    "mkdirp-promise": "^5.0.1",
     "moment": "^2.22.2",
     "node-rsa": "^1.0.0",
+    "nodemailer": "^4.6.7",
+    "nodemailer-smtp-transport": "^2.7.4",
     "pg": "^7.4.3"
   }
 }
