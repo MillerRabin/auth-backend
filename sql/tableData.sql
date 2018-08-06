@@ -27,8 +27,8 @@ create table users (
     mail_code int
 );
 
-CREATE INDEX users_private ON users USING GIN (private_data);
-CREATE INDEX users_public ON users USING GIN (public_data);
+create index users_private on users using gin (private_data);
+create index users_public on users using gin (public_data);
 
 create table auth_log
 (
@@ -37,11 +37,19 @@ create table auth_log
     ip varchar(32)
 )
 
+create table configs
+(
+    id serial primary key,
+    name varchar(100),
+    config jsonb,
+    create_time timestamp with time zone default now(),
+    update_time timestamp with time zone default now()
+)
+
+create index configs_name on configs (name);
+create index configs_config on configs using gin (config);
+
+
 insert into users (nick_name, email, phone, password) values ('Miller Rabin', 'millerrabin@raintech.su', 89154230004,
     crypt('ifyouwanttohave', gen_salt('md5')));
 
-update users set private_data = '{ "ci.raintech.su": {} }' where email = 'millerrabin@raintech.su';
-
-select * from users where private_data ? 'ci.raintech.su';
-
-select * from users where (login = 'millerrabin' or email = 'millerrabin' or nick_name = 'millerrabin')

@@ -6,7 +6,7 @@ const valid = require('./valid.js');
 const response = require('../middlewares/response.js');
 const config = require('../config.js');
 const db = require('./postgres.js');
-const mail = require('./mail.js');
+const mail = require('./mail/mail.js');
 
 exports.getUser = ({ connection, query, includePrivate, rowMode = 'array'}) => {
     const params = [];

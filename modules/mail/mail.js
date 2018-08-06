@@ -2,7 +2,7 @@ const nodemailer = require('nodemailer');
 const smtpTransport = require('nodemailer-smtp-transport');
 const Router = require('koa-router');
 const koaBody = require('koa-body');
-const response = require('../middlewares/response.js');
+const response = require('../../middlewares/response.js');
 const path = require('path');
 
 exports.send = async (info) => {
