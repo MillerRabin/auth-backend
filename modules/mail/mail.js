@@ -1,13 +1,32 @@
+const appConfigs = require('../configs.js');
 const nodemailer = require('nodemailer');
 const smtpTransport = require('nodemailer-smtp-transport');
-const Router = require('koa-router');
-const koaBody = require('koa-body');
-const response = require('../../middlewares/response.js');
 const path = require('path');
+const mustache = require('mustache');
+const fs = require('fs').promises;
+
+async function getLocalTemplate(templateName, params) {
+    const fileName = path.resolve(path.join(__dirname, 'templates', templateName, '.html'));
+    const buffer = await fs.readFile(fileName);
+    return mustache.render(buffer, params);
+}
+
+
+async function getTemplate({ connection, referer, templateName, params }) {
+    const config = await appConfigs.getConfigByName({ connection, name: referer});
+    if (config == null) return await getLocalTemplate(templateName, params);
+    return await getLocalTemplate(templateName, params);
+}
 
 exports.send = async (info) => {
-    let html = pug.renderFile(path.join(__dirname, 'templates', info.template), info.templateData);
-    let options = {
+    const html = await getTemplate({
+        connection: info.connection,
+        templateName: info.template.name,
+        params: info.template.params,
+        referer: info.referer
+    });
+
+    const options = {
         secure: true,
         host: 'smtp.yandex.ru',
         name: 'smtp.yandex.ru',
@@ -20,13 +39,12 @@ exports.send = async (info) => {
             pass: info.auth.password
         }
     };
-    let transporter = nodemailer.createTransport(smtpTransport(options));
-    let from = info.from;
-    from = (info.fromName != null) ? info.fromName : from;
-    let mailOptions = {
+    const transporter = nodemailer.createTransport(smtpTransport(options));
+    const from = (info.fromName != null) ? info.fromName : info.from;
+    const mailOptions = {
         from: from + ' <' + info.from + '>',
         to: info.to,
-        bcc: 'logs@anna.systems',
+        bcc: info.logs,
         subject: info.subject,
         html: html
     };
@@ -39,17 +57,4 @@ exports.send = async (info) => {
             return resolve(data);
         });
     });
-};
-
-exports.addController = (application, controllerName) => {
-    let router = new Router();
-
-    router.post('/' + controllerName + '/send', koaBody(), async (ctx) => {
-        return await exports.send(ctx.request.body).catch((err) => {
-            console.log(err);
-            throw new response.Error(err);
-        });
-    });
-
-    application.use(router.routes());
 };

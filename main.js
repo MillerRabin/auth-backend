@@ -9,7 +9,6 @@ const cors = require('koa2-cors');
 const { Pool } = require('pg');
 const users = require('./modules/users.js');
 
-
 const response = require('./middlewares/response.js');
 const responseTime = require('./middlewares/responseTime.js');
 

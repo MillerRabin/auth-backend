@@ -190,7 +190,37 @@ exports.signup = async ({ connection, user }) => {
     return rObj;
 };
 
-function changePasswordByEmail({ connection, user }) {
+async function changePasswordByEmail({ connection, user, request }) {
+    if (user.email == null) throw new Response.Error({ email: 'user email expected'});
+    const userData = await exports.getUser({ connection, email: user.email, rowMode: 'json' });
+    if (userData.rows.length == 0) throw new Response.Error({ message: 'Invalid email'});
+    const rUser = userData.rows[0];
+    const ip = exports.getIp(request);
+    const cert = certificate.issue({
+        email: rUser.email,
+        ip: ip,
+        userAgent: request.headers['user-agent']
+    });
+    const subject = 'Changing Password';
+    const fromName = 'Registrator Raintech Open Auth';
+    await mail.sendWithEvent({
+        connection,
+        template: {
+            name: 'restorePassword',
+            eventName: 'restorePasswordEvent',
+            params: {
+                email: rUser.email,
+                referer: user.referer
+            },
+            referer: user.referer,
+            auth: config.settings.mail.auth,
+            from: config.settings.mail.from,
+            fromName: fromName,
+            to: user.email,
+            subject: subject,
+            logs: config.settings.mail.logs
+        }
+    })
 
 }
 
@@ -231,10 +261,11 @@ exports.addController = (application, controllerName) => {
     router.post('/' + controllerName + '/changepassword/byemail', koaBody(), async (ctx) => {
         const user = ctx.request.body;
         const headers = ctx.req.headers;
+        user.referer = (user.referer == null) ? headers.referer : user.referer;
         if (user.email == null) throw new response.Error({ email: 'Please specify your email'});
         const connection = await application.pool.connect();
         try {
-            return await changePasswordByEmail({ connection, user});
+            return await changePasswordByEmail({ connection, user, request: ctx.request });
         } finally {
             await connection.release();
         }

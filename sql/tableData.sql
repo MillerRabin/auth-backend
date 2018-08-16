@@ -46,10 +46,11 @@ create table configs
     update_time timestamp with time zone default now()
 )
 
-create index configs_name on configs (name);
+create unique index configs_name on configs (name);
 create index configs_config on configs using gin (config);
 
 
 insert into users (nick_name, email, phone, password) values ('Miller Rabin', 'millerrabin@raintech.su', 89154230004,
     crypt('ifyouwanttohave', gen_salt('md5')));
 
+select * from configs;

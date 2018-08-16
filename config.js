@@ -33,7 +33,6 @@ exports.port = process.env.PORT | 8093;
 
 exports.settings = exports.production ? productionSettings : developSettings;
 
-if (exports.settings.pool == null) {
-    const str = fs.readFileSync('./credentials.json', { encoding: 'utf-8'});
-    exports.settings.pool = JSON.parse(str).databasePool;
-}
+const credentials = JSON.parse(fs.readFileSync('./credentials.json', { encoding: 'utf-8'}));
+exports.settings.pool = (exports.settings.pool == null) ? credentials.databasePool : exports.settings.pool;
+exports.settings.mail = (exports.settings.mail == null) ? credentials.mail : exports.settings.mail;

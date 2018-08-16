@@ -45,12 +45,11 @@ exports.getKeys = async (folder) => {
     }
 };
 
-exports.issue = async function(data) {
+exports.issue = async function(data, params = {}) {
     const rsa = await moduleLoad;
-    data.issuedDate = new Date();
-    const expDate = new Date();
-    expDate.setDate(expDate.getDate() + 1);
-    data.expirationDate = expDate;
+    data.issuedDate = new Date().getTime();
+    params.lifeTime = (params.lifeTime == null) ? 86400000 : params.lifeTime * 1000;
+    data.expirationDate = data.issuedDate + params.lifeTime;
     data.commonName = config.commonName;
     const str = JSON.stringify(data);
     return rsa.encryptPrivate(str, 'base64');
