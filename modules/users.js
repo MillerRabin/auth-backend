@@ -8,6 +8,9 @@ const config = require('../config.js');
 const db = require('./postgres.js');
 const mail = require('./mail/mail.js');
 
+const urlLink = require('./urlLink.js');
+const querystring = require('querystring');
+
 exports.getUser = ({ connection, query, includePrivate, rowMode = 'array'}) => {
     const params = [];
     const where = [];
@@ -51,8 +54,8 @@ exports.getIp = (request) => {
     return str;
 };
 
-exports.authenticateUser = async (connection, user, request) => {
-    const cobj = {};
+exports.authenticateUser = async (connection, user, request, certParams = {}) => {
+    const cobj = Object.assign(certParams);
     cobj.ip = exports.getIp(request);
     cobj.userId = db.getData(user, 0, 'id');
     cobj.userAgent = request.headers['user-agent'];
@@ -191,37 +194,34 @@ exports.signup = async ({ connection, user }) => {
 };
 
 async function changePasswordByEmail({ connection, user, request }) {
-    if (user.email == null) throw new Response.Error({ email: 'user email expected'});
-    const userData = await exports.getUser({ connection, email: user.email, rowMode: 'json' });
-    if (userData.rows.length == 0) throw new Response.Error({ message: 'Invalid email'});
-    const rUser = userData.rows[0];
-    const ip = exports.getIp(request);
-    const cert = certificate.issue({
-        email: rUser.email,
-        ip: ip,
-        userAgent: request.headers['user-agent']
-    });
+    if (user.email == null) throw new response.Error({ email: 'user email expected'});
+    const userData = await exports.getUser({ connection, query: { email: user.email }});
+    if (userData.rows.length == 0) throw new response.Error({ message: 'Invalid email'});
+    const rData = await exports.authenticateUser(connection, userData, request, { lifeTime: 3600, autoRenew: false });
     const subject = 'Changing Password';
     const fromName = 'Registrator Raintech Open Auth';
+    const link = urlLink.join(user.referer, '/changepassword.html');
+    const fullLink = link + '?' + querystring.stringify({ cert: rData.certificate });
     await mail.sendWithEvent({
         connection,
         template: {
             name: 'restorePassword',
             eventName: 'restorePasswordEvent',
             params: {
-                email: rUser.email,
-                referer: user.referer
+                email: user.email,
+                referer: user.referer,
+                link: fullLink
             },
-            referer: user.referer,
-            auth: config.settings.mail.auth,
-            from: config.settings.mail.from,
-            fromName: fromName,
-            to: user.email,
-            subject: subject,
-            logs: config.settings.mail.logs
-        }
-    })
-
+        },
+        referer: user.referer,
+        auth: config.settings.mail.auth,
+        from: config.settings.mail.from,
+        fromName: fromName,
+        to: user.email,
+        subject: subject,
+        logs: config.settings.mail.logs
+    });
+    return rData;
 }
 
 exports.addController = (application, controllerName) => {
@@ -236,8 +236,7 @@ exports.addController = (application, controllerName) => {
         }
 
         const user = ctx.request.body;
-        const headers = ctx.req.headers;
-        user.referer = (user.referer == null) ? headers.referer : user.referer;
+        user.referer = urlLink.getReferer(ctx.req, user);
         const connection = await application.pool.connect();
         try {
             return await postUser(connection, user);
@@ -248,8 +247,7 @@ exports.addController = (application, controllerName) => {
 
     router.post('/' + controllerName + '/signup/bypassword', koaBody(), async (ctx) => {
         const user = ctx.request.body;
-        const headers = ctx.req.headers;
-        user.referer = (user.referer == null) ? headers.referer : user.referer;
+        user.referer = urlLink.getReferer(ctx.req, user);
         const connection = await application.pool.connect();
         try {
             return await exports.signup({ connection, user});
@@ -260,8 +258,7 @@ exports.addController = (application, controllerName) => {
 
     router.post('/' + controllerName + '/changepassword/byemail', koaBody(), async (ctx) => {
         const user = ctx.request.body;
-        const headers = ctx.req.headers;
-        user.referer = (user.referer == null) ? headers.referer : user.referer;
+        user.referer = urlLink.getReferer(ctx.req, user);
         if (user.email == null) throw new response.Error({ email: 'Please specify your email'});
         const connection = await application.pool.connect();
         try {

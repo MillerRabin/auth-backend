@@ -6,8 +6,8 @@ const mustache = require('mustache');
 const fs = require('fs').promises;
 
 async function getLocalTemplate(templateName, params) {
-    const fileName = path.resolve(path.join(__dirname, 'templates', templateName, '.html'));
-    const buffer = await fs.readFile(fileName);
+    const fileName = path.resolve(path.join(__dirname, 'templates', templateName + '.html'));
+    const buffer = (await fs.readFile(fileName)).toString();
     return mustache.render(buffer, params);
 }
 
@@ -57,4 +57,22 @@ exports.send = async (info) => {
             return resolve(data);
         });
     });
+};
+
+exports.sendWithEvent = async (info) => {
+    await exports.send(info);
+    await exports.send({
+        connection: info.connection,
+        template: {
+            name: info.template.eventName,
+            params: info.template.params,
+        },
+        referer: info.referer,
+        auth: info.auth,
+        from: info.from,
+        fromName: info.fromName,
+        to: info.email,
+        subject: info.subject,
+        logs: info.logs
+    })
 };

@@ -17,7 +17,7 @@ exports.query = ({ connection, query, rowMode = 'array'}) => {
 };
 
 exports.getConfigByName = async ({ connection, name }) => {
-    const appConfig = await exports.get({
+    const appConfig = await exports.query({
         connection,
         query: { name: name },
         rowMode: 'json'
