@@ -48,7 +48,7 @@ exports.getKeys = async (folder) => {
 exports.issue = async function(data, params = {}) {
     const rsa = await moduleLoad;
     data.issuedDate = new Date().getTime();
-    params.lifeTime = (params.lifeTime == null) ? 86400000 : params.lifeTime * 1000;
+    params.lifeTime = (params.lifeTime == null) ? 86400000 * 2 : params.lifeTime * 1000;
     data.expirationDate = data.issuedDate + params.lifeTime;
     data.commonName = config.commonName;
     const str = JSON.stringify(data);

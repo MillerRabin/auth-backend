@@ -54,20 +54,35 @@ exports.getIp = (request) => {
     return str;
 };
 
-exports.authenticateUser = async (connection, user, request, certParams = {}) => {
+async function getCertificate({ request, certParams = {}, }) {
     const cobj = Object.assign(certParams);
     cobj.ip = exports.getIp(request);
-    cobj.userId = db.getData(user, 0, 'id');
     cobj.userAgent = request.headers['user-agent'];
     const cert = await certificate.issue(cobj);
-    await exports.updateLastTime(connection, cobj.userId);
+    return {
+        obj: cobj,
+        certificate: cert
+    }
+}
+
+exports.renewCertificateIfNeeded = async (session, request, response) => {
+    const time = new Date().getTime();
+    const renewTime = session.expirationDate - 86400000;
+    if (time < renewTime) return;
+    const cobj = await getCertificate({ request, certParams: { userId: session.userId }});
+    response.headers['certificate'] = cobj.certificate;
+};
+
+exports.authenticateUser = async (connection, user, request, certParams = {}) => {
+    const cobj = await getCertificate({request, certParams: { userId: user.id }});
+    await exports.updateLastTime(connection, cobj.obj.userId);
     await exports.logAuth(connection, {
         user: user,
-        ip: cobj.ip
+        ip: cobj.obj.ip
     });
     return {
-        user: db.formatResponse(user),
-        certificate: cert
+        user: user,
+        certificate: cobj.certificate
     };
 };
 
@@ -76,18 +91,19 @@ exports.updateLastTime = (connection, id) => {
     connection.query('update users set last_visited = now() where id = $1', [id]);
 };
 
-exports.checkSession = async (request, userName) => {
-    function checkSession(session, userName, request) {
-        //let ip = exports.getIp(request);
-        //if ((config.production) && (session.ip != ip)) return false;
-        let userAgent = request.headers['user-agent'];
-        if (session.userAgent != userAgent) return false;
-        if (userName == null) return true;
-        if (session.email == userName) return true;
-        return (session.phone == userName);
+exports.checkSession = async (request) => {
+    function checkSession(session, request) {
+        const ip = exports.getIp(request);
+        if ((config.production) && (session.ip != ip)) throw new response.Error({ text: 'Invalid ip', code: 'CertInvalidIp'});
+        const userAgent = request.headers['user-agent'];
+        if (session.userAgent != userAgent) throw new response.Error({ text: 'invalid user agent', code: 'CertInvalidUserAgent'});
+        const time = new Date().getTime();
+        if (time > session.expirationDate) throw new response.Error({ text: 'Certificate expired', code: 'CertExpired'});
+        return session;
     }
 
-    const eobj = { text: 'The session is incorrect'};
+
+    const eobj = { text: 'Invalid certificate', code: 'invalidCertificate' };
     if (request.body == null) throw new response.Error(eobj);
     const user = (request.body.fields == null) ? request.body : request.body.fields;
 
@@ -95,19 +111,17 @@ exports.checkSession = async (request, userName) => {
     if (certData == null) throw new response.Error(eobj);
 
     const session = await certificate.read(certData);
-    if (!checkSession(session, userName, request))
-        throw new response.Error(eobj);
-    return session;
+    return checkSession(session, request);
 };
 
 async function getUserByCertificate(connection, request) {
     const session = await exports.checkSession(request);
-    const user = await exports.getUser({ connection, query: { id: session.userId }, includePrivate: true });
+    const user = await exports.getUser({ connection, query: { id: session.userId }, includePrivate: true, rowMode: 'json' });
     if (user.rows.length == 0) throw new response.Error({ text: 'Certificate is invalid' });
-    return await exports.authenticateUser(connection, user, request, session.type);
+    return await exports.authenticateUser(connection, user.rows[0], request, session.type);
 }
 
-exports.byPassword = async ({ connection, user, rowMode = 'array' }) => {
+exports.byPassword = async ({ connection, user }) => {
     const eobj = { login: 'Wrong login or password'};
     if (user.password == null) throw new response.Error(eobj);
     const qobj = {};
@@ -118,9 +132,9 @@ exports.byPassword = async ({ connection, user, rowMode = 'array' }) => {
     if (Object.keys(qobj).length == 0) throw new response.Error(eobj);
     if (user.referer != null) qobj.referer = user.referer;
     qobj.password = (config.allowEveryone) ? null : user.password;
-    const rUser = await exports.getUser({ connection, query: qobj, includePrivate: true, rowMode });
+    const rUser = await exports.getUser({ connection, query: qobj, includePrivate: true, rowMode: 'json'  });
     if (rUser.rows.length == 0) throw new response.Error(eobj);
-    return rUser;
+    return rUser.rows[0];
 };
 
 exports.add = async ({ connection, user }) => {
@@ -166,7 +180,7 @@ exports.logAuth = async (connection, params) => {
     const dbparams = [];
     const values = [];
     const data = [];
-    const id = db.getData(params.user, 0, 'id');
+    const id = params.user.id;
     if (id != null) {
         values.push('id');
         data.push(`$${ dbparams.push(id)}`);
@@ -195,9 +209,9 @@ exports.signup = async ({ connection, user }) => {
 
 async function changePasswordByEmail({ connection, user, request }) {
     if (user.email == null) throw new response.Error({ email: 'user email expected'});
-    const userData = await exports.getUser({ connection, query: { email: user.email }});
+    const userData = await exports.getUser({ connection, query: { email: user.email }, rowMode: 'json' });
     if (userData.rows.length == 0) throw new response.Error({ message: 'Invalid email'});
-    const rData = await exports.authenticateUser(connection, userData, request, { lifeTime: 3600, autoRenew: false });
+    const rData = await exports.authenticateUser(connection, userData.rows[0], request);
     const subject = 'Changing Password';
     const fromName = 'Registrator Raintech Open Auth';
     const link = urlLink.join(user.referer, '/changepassword.html');
@@ -223,6 +237,26 @@ async function changePasswordByEmail({ connection, user, request }) {
     });
     return rData;
 }
+
+exports.update = async ({ connection, id, data }) => {
+    if (id == null) throw new response.Error({ id: 'User id expected'});
+    const vals = [];
+    const params = [id];
+    if (data.newPassword != null) {
+        if (data.newPassword != data.confirmPassword) throw new response.Error({ confirmPassword: 'The passwords does not match'});
+        vals.push(`password = crypt($${ params.push(data.newPassword) }, gen_salt('md5'))`);
+    }
+    if (vals.length == 0) throw new response.Error({text: 'there are no valid fields' });
+
+    const dbQuery = {
+        text: `update users set ${ vals.join(', ')} where id = $1`,
+        values: params
+    };
+    const results = await connection.query(dbQuery);
+    if (results.rowsAffected == 0) throw new response.Error({ text: 'No users updated'});
+    return { text: 'update success'};
+};
+
 
 exports.addController = (application, controllerName) => {
     const router = new Router();
@@ -263,6 +297,19 @@ exports.addController = (application, controllerName) => {
         const connection = await application.pool.connect();
         try {
             return await changePasswordByEmail({ connection, user, request: ctx.request });
+        } finally {
+            await connection.release();
+        }
+    });
+
+    router.put('/' + controllerName, koaBody(), async (ctx) => {
+        const user = ctx.request.body;
+        const session = await exports.checkSession(ctx.request);
+        const connection = await application.pool.connect();
+        try {
+            const rData = await exports.update({ connection, id: session.userId, data: user });
+            await exports.renewCertificateIfNeeded(session, ctx.request, ctx.response);
+            return rData;
         } finally {
             await connection.release();
         }
