@@ -5,17 +5,16 @@ const certificate = require('./certificate.js');
 const valid = require('./valid.js');
 const response = require('../middlewares/response.js');
 const config = require('../config.js');
-const db = require('./postgres.js');
 const mail = require('./mail/mail.js');
 
 const urlLink = require('./urlLink.js');
 const querystring = require('querystring');
 
-exports.getUser = ({ connection, query, includePrivate, rowMode = 'array'}) => {
+exports.getUser = ({ connection, query, addFields = [], rowMode = 'array'}) => {
     const params = [];
     const where = [];
     const fields = ['id', 'login', 'public_data' ];
-    if (includePrivate) fields.push('phone', 'skype', 'email');
+    fields.push(...addFields);
     if (query.email != null) where.push('email = $' + params.push(query.email));
     if (query.phone != null) where.push('phone = $' + params.push(query.phone));
     if (query.login != null) where.push('login = $' + params.push(query.login));
@@ -29,7 +28,9 @@ exports.getUser = ({ connection, query, includePrivate, rowMode = 'array'}) => {
     }
     if (query.referer != null) {
         where.push(`private_data ? $${ params.push(query.referer )}`);
-        fields.push(`private_data->'${ query.referer}' private_data `);
+        fields.push(`private_data->'${ query.referer}' private_data`);
+    } else {
+        fields.push('private_data');
     }
     if (params.length == 0) throw new response.Error({ text: 'There are no valid parameters'});
 
@@ -73,7 +74,7 @@ exports.renewCertificateIfNeeded = async (session, request, response) => {
     response.headers['certificate'] = cobj.certificate;
 };
 
-exports.authenticateUser = async (connection, user, request, certParams = {}) => {
+exports.authenticateUser = async (connection, user, request) => {
     const cobj = await getCertificate({request, certParams: { userId: user.id }});
     await exports.updateLastTime(connection, cobj.obj.userId);
     await exports.logAuth(connection, {
@@ -116,28 +117,41 @@ exports.checkSession = async (request) => {
 
 async function getUserByCertificate(connection, request) {
     const session = await exports.checkSession(request);
-    const user = await exports.getUser({ connection, query: { id: session.userId }, includePrivate: true, rowMode: 'json' });
+    const user = await exports.getUser({ connection, query: { id: session.userId }, rowMode: 'json', addFields: ['phone', 'skype', 'email'] });
     if (user.rows.length == 0) throw new response.Error({ text: 'Certificate is invalid' });
     return await exports.authenticateUser(connection, user.rows[0], request, session.type);
 }
 
-exports.byPassword = async ({ connection, user }) => {
-    const eobj = { login: 'Wrong login or password'};
-    if (user.password == null) throw new response.Error(eobj);
+function prepareLoginData(user) {
     const qobj = {};
     if (valid.email({ value: user.email })) qobj.email = user.email.toLowerCase();
     if (valid.login({ value: user.login })) qobj.login = user.login.toLowerCase();
     if (valid.phone({ value: user.phone })) qobj.phone = user.phone.toLowerCase();
     if (user.loginOrEmail != null) qobj.loginOrEmail = user.loginOrEmail.toLowerCase();
+    return qobj;
+}
+
+function getPassword(user) {
+    return (user.password == null) ? user.newPassword : user.password;
+}
+
+exports.byPassword = async ({ connection, user }) => {
+    const eobj = { login: 'Wrong login or password'};
+    const qobj = prepareLoginData(user);
     if (Object.keys(qobj).length == 0) throw new response.Error(eobj);
     if (user.referer != null) qobj.referer = user.referer;
-    qobj.password = (config.allowEveryone) ? null : user.password;
-    const rUser = await exports.getUser({ connection, query: qobj, includePrivate: true, rowMode: 'json'  });
+    qobj.password = getPassword(user);
+    if (config.allowEveryone) {
+        qobj.password = null;
+    } else if (qobj.password == null)
+        throw new response.Error(eobj);
+
+    const rUser = await exports.getUser({ connection, query: qobj, rowMode: 'json', addFields: ['phone', 'skype', 'email'] });
     if (rUser.rows.length == 0) throw new response.Error(eobj);
     return rUser.rows[0];
 };
 
-exports.add = async ({ connection, user }) => {
+exports.add = async ({ connection, user, rowMode = 'json' }) => {
     const params = [];
     const fields = [];
     const vals = [];
@@ -169,7 +183,8 @@ exports.add = async ({ connection, user }) => {
     }
 
     const dbQuery = {
-        text: `insert into users (${ fields.join(', ')}) values (${ vals.join(', ')}) returning id`,
+        text: `insert into users (${ fields.join(', ')}) values (${ vals.join(', ')}) returning id, login, public_data, private_data, email, phone, skype`,
+        rowMode: rowMode,
         values: params
     };
     return connection.query(dbQuery);
@@ -194,27 +209,43 @@ exports.logAuth = async (connection, params) => {
     await connection.query(insertQuery, dbparams);
 };
 
-exports.signup = async ({ connection, user }) => {
-    const rUser = Object.assign(user);
-    delete rUser.referer;
-    const [sUser] = await exports.byPassword({ connection, rUser, rowMode: 'json' });
-    if (sUser == null)
-        return db.formatResponse(await exports.add({ connection, user }));
-    const pData = sUser.private_data;
-    const rObj = { id: sUser.id };
-    if (pData[user.referer] != null) return rObj;
-    pData[user.referer] = {};
+function getRefererBranch(data, referer) {
+    const rObj = {};
+    rObj[referer] = data[referer];
     return rObj;
+}
+
+
+exports.signup = async ({ connection, user }) => {
+    const qobj = prepareLoginData(user);
+    qobj.password = getPassword(user);
+    const sUserData = await exports.getUser({ connection, query: qobj, rowMode: 'json', addFields: ['email', 'phone', 'skype'] });
+    const sUser = sUserData.rows[0];
+    if (sUser == null) {
+        const aData = await exports.add({ connection, user, rowMode: 'json' });
+        const newUser = aData.rows[0];
+        newUser.private_data = getRefererBranch(newUser.private_data, user.referer);
+        return newUser;
+    }
+    const pData = (sUser.private_data == null) ? {} : sUser.private_data;
+    if (pData[user.referer] != null) {
+        sUser.private_data = getRefererBranch(pData, user.referer);
+        return sUser;
+    }
+    pData[user.referer] = {};
+    await exports.update({ connection, id: sUser.id, data: { private_data: pData } });
+    sUser.private_data = getRefererBranch(pData, user.referer);
+    return sUser;
 };
 
 async function changePasswordByEmail({ connection, user, request }) {
     if (user.email == null) throw new response.Error({ email: 'user email expected'});
-    const userData = await exports.getUser({ connection, query: { email: user.email }, rowMode: 'json' });
-    if (userData.rows.length == 0) throw new response.Error({ message: 'Invalid email'});
+    const userData = await exports.getUser({ connection, query: { email: user.email }, rowMode: 'json', addFields: ['phone', 'skype', 'email'] });
+    if (userData.rows.length == 0) throw new response.Error({ email: 'Invalid email'});
     const rData = await exports.authenticateUser(connection, userData.rows[0], request);
     const subject = 'Changing Password';
     const fromName = 'Registrator Raintech Open Auth';
-    const link = urlLink.join(user.referer, '/changepassword.html');
+    const link = 'https://' + urlLink.join(user.referer, '/changepassword.html');
     const fullLink = link + '?' + querystring.stringify({ cert: rData.certificate });
     await mail.sendWithEvent({
         connection,
@@ -261,19 +292,25 @@ exports.update = async ({ connection, id, data }) => {
 exports.addController = (application, controllerName) => {
     const router = new Router();
 
-    router.post('/' + controllerName + '/login/bypassword', koaBody(), async (ctx) => {
-        async function postUser(connection, user) {
-            if ((user.password == null) && (user.certificate != null))
-                return await getUserByCertificate(connection, ctx.request);
-            const res = await exports.byPassword({ connection, user });
-            return await exports.authenticateUser(connection, res, ctx.request);
+    router.post('/' + controllerName + '/login/bycert', koaBody(), async (ctx) => {
+        const user = ctx.request.body;
+        user.referer = urlLink.getReferer(ctx.req, user);
+        if (user.certificate == null) throw new response.Error({ certificate: 'Certificate expected'});
+        const connection = await application.pool.connect();
+        try {
+            return await getUserByCertificate(connection, ctx.request);
+        } finally {
+            await connection.release();
         }
+    });
 
+    router.post('/' + controllerName + '/login/bypassword', koaBody(), async (ctx) => {
         const user = ctx.request.body;
         user.referer = urlLink.getReferer(ctx.req, user);
         const connection = await application.pool.connect();
         try {
-            return await postUser(connection, user);
+            const res = await exports.byPassword({ connection, user });
+            return await exports.authenticateUser(connection, res, ctx.request);
         } finally {
             await connection.release();
         }
@@ -284,7 +321,8 @@ exports.addController = (application, controllerName) => {
         user.referer = urlLink.getReferer(ctx.req, user);
         const connection = await application.pool.connect();
         try {
-            return await exports.signup({ connection, user});
+            const rUser = await exports.signup({ connection, user});
+            return await exports.authenticateUser(connection, rUser, ctx.request );
         } finally {
             await connection.release();
         }
@@ -296,7 +334,8 @@ exports.addController = (application, controllerName) => {
         if (user.email == null) throw new response.Error({ email: 'Please specify your email'});
         const connection = await application.pool.connect();
         try {
-            return await changePasswordByEmail({ connection, user, request: ctx.request });
+            await changePasswordByEmail({ connection, user, request: ctx.request });
+            return { message: 'The link to change password is sent to your email' };
         } finally {
             await connection.release();
         }

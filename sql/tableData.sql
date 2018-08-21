@@ -4,10 +4,10 @@ create extension postgis;
 
 create table users (
     id uuid primary key default gen_random_uuid(),
-    nick_name varchar(32) not null,
+    nick_name varchar(32),
     email varchar(64) not null,
-    login varchar(32) not null,
-    phone bigint not null,
+    login varchar(32),
+    phone bigint,
     create_time timestamp with time zone not null default now(),
     update_time timestamp with time zone not null default now(),
     last_visited timestamp with time zone,
@@ -54,3 +54,5 @@ insert into users (nick_name, email, phone, password) values ('Miller Rabin', 'm
     crypt('ifyouwanttohave', gen_salt('md5')));
 
 select * from configs;
+
+select * from users;
