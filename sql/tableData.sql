@@ -56,3 +56,4 @@ insert into users (nick_name, email, phone, password) values ('Miller Rabin', 'm
 select * from configs;
 
 select * from users;
+delete from users where nick_name is null;

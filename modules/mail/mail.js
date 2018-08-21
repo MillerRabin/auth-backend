@@ -60,8 +60,8 @@ exports.send = async (info) => {
 };
 
 exports.sendWithEvent = async (info) => {
-    await exports.send(info);
-    await exports.send({
+    exports.send(info);
+    exports.send({
         connection: info.connection,
         template: {
             name: info.template.eventName,

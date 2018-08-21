@@ -215,6 +215,41 @@ function getRefererBranch(data, referer) {
     return rObj;
 }
 
+async function notifyNewUser({ connection, user}) {
+    const fromName = 'Registrator Raintech Open Auth';
+    const subject = 'Your registration at ' + user.referer;
+    const pwd = getPassword(user);
+    return await mail.sendWithEvent({
+        connection,
+        template: {
+            name: 'newUser',
+            eventName: 'newUserEvent',
+            params: {
+                login: user.email,
+                referer: user.referer,
+                password: pwd
+            },
+        },
+        referer: user.referer,
+        auth: config.settings.mail.auth,
+        from: config.settings.mail.from,
+        fromName: fromName,
+        to: user.email,
+        subject: subject,
+        logs: config.settings.mail.logs
+    });
+}
+
+
+async function createNewUser({ connection, user}) {
+    const aData = await exports.add({ connection, user, rowMode: 'json' });
+    const newUser = aData.rows[0];
+    newUser.private_data = getRefererBranch(newUser.private_data, user.referer);
+    await notifyNewUser({ connection, user });
+    return newUser;
+}
+
+
 
 exports.signup = async ({ connection, user }) => {
     const qobj = prepareLoginData(user);
@@ -222,10 +257,7 @@ exports.signup = async ({ connection, user }) => {
     const sUserData = await exports.getUser({ connection, query: qobj, rowMode: 'json', addFields: ['email', 'phone', 'skype'] });
     const sUser = sUserData.rows[0];
     if (sUser == null) {
-        const aData = await exports.add({ connection, user, rowMode: 'json' });
-        const newUser = aData.rows[0];
-        newUser.private_data = getRefererBranch(newUser.private_data, user.referer);
-        return newUser;
+        return await createNewUser({ connection, user });
     }
     const pData = (sUser.private_data == null) ? {} : sUser.private_data;
     if (pData[user.referer] != null) {
@@ -234,6 +266,7 @@ exports.signup = async ({ connection, user }) => {
     }
     pData[user.referer] = {};
     await exports.update({ connection, id: sUser.id, data: { private_data: pData } });
+    await notifyNewUser({ connection, user });
     sUser.private_data = getRefererBranch(pData, user.referer);
     return sUser;
 };
