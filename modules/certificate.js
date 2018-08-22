@@ -4,7 +4,7 @@ const config = require('../config.js');
 const fs = require('fs').promises;
 const mkdirp = require('mkdirp-promise');
 const path = require('path');
-
+const Router = require('koa-router');
 
 exports.generateKeys = function () {
     const rsa = new NodeRSA();
@@ -76,4 +76,19 @@ async function load(keyFolder) {
     return rsa;
 }
 
-const moduleLoad = load(path.join(process.cwd(), '.keys'));
+const keyPath = path.join(process.cwd(), '.keys');
+const moduleLoad = load(keyPath);
+
+exports.addController = (application, controllerName) => {
+    const router = new Router();
+
+    router.get('/' + controllerName + '/key', async () => {
+        const rsa = await moduleLoad;
+        const pubkey = rsa.exportKey('pkcs8-public-pem');
+        return {
+            public:  pubkey
+        }
+    });
+
+    application.use(router.routes());
+};

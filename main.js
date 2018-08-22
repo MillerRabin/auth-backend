@@ -8,6 +8,7 @@ const koaStatic = require('koa-static');
 const cors = require('koa2-cors');
 const { Pool } = require('pg');
 const users = require('./modules/users.js');
+const certificate = require('./modules/certificate.js');
 
 const response = require('./middlewares/response.js');
 const responseTime = require('./middlewares/responseTime.js');
@@ -23,7 +24,7 @@ if (!config.production) {
 application.use(response.koa);
 
 users.addController(application, 'api/users');
-
+certificate.addController(application, 'api/certificate');
 
 function createServer(application, port) {
     return new Promise((resolve, reject) => {
