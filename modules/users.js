@@ -95,16 +95,16 @@ exports.updateLastTime = (connection, id) => {
 exports.checkSession = async (request) => {
     function checkSession(session, request) {
         const ip = exports.getIp(request);
-        if ((config.production) && (session.ip != ip)) throw new response.Error({ text: 'Invalid ip', code: 'CertInvalidIp'});
+        if ((config.production) && (session.ip != ip)) throw new response.Error({ message: 'Invalid ip', code: 'CertInvalidIp'});
         const userAgent = request.headers['user-agent'];
-        if (session.userAgent != userAgent) throw new response.Error({ text: 'invalid user agent', code: 'CertInvalidUserAgent'});
+        if (session.userAgent != userAgent) throw new response.Error({ message: 'invalid user agent', code: 'CertInvalidUserAgent'});
         const time = new Date().getTime();
-        if (time > session.expirationDate) throw new response.Error({ text: 'Certificate expired', code: 'CertExpired'});
+        if (time > session.expirationDate) throw new response.Error({ message: 'Your certificate is expired', code: 'CertExpired'});
         return session;
     }
 
 
-    const eobj = { text: 'Invalid certificate', code: 'invalidCertificate' };
+    const eobj = { message: 'Invalid certificate', code: 'invalidCertificate' };
     if (request.body == null) throw new response.Error(eobj);
     const user = (request.body.fields == null) ? request.body : request.body.fields;
 
@@ -118,7 +118,7 @@ exports.checkSession = async (request) => {
 async function getUserByCertificate(connection, request) {
     const session = await exports.checkSession(request);
     const user = await exports.getUser({ connection, query: { id: session.userId }, rowMode: 'json', addFields: ['phone', 'skype', 'email'] });
-    if (user.rows.length == 0) throw new response.Error({ text: 'Certificate is invalid' });
+    if (user.rows.length == 0) throw new response.Error({ message: 'Certificate is invalid' });
     return await exports.authenticateUser(connection, user.rows[0], request, session.type);
 }
 
@@ -310,15 +310,15 @@ exports.update = async ({ connection, id, data }) => {
         if (data.newPassword != data.confirmPassword) throw new response.Error({ confirmPassword: 'The passwords does not match'});
         vals.push(`password = crypt($${ params.push(data.newPassword) }, gen_salt('md5'))`);
     }
-    if (vals.length == 0) throw new response.Error({text: 'there are no valid fields' });
+    if (vals.length == 0) throw new response.Error({message: 'there are no valid fields' });
 
     const dbQuery = {
         text: `update users set ${ vals.join(', ')} where id = $1`,
         values: params
     };
     const results = await connection.query(dbQuery);
-    if (results.rowsAffected == 0) throw new response.Error({ text: 'No users updated'});
-    return { text: 'update success'};
+    if (results.rowsAffected == 0) throw new response.Error({ message: 'No users updated'});
+    return { message: 'update success'};
 };
 
 
@@ -388,7 +388,7 @@ exports.addController = (application, controllerName) => {
     });
 
     router.get('/' + controllerName + '/logout', async () => {
-        return {text: 'Current user is successfully logout'};
+        return {message: 'Current user is successfully logout'};
     });
 
     application.use(router.routes());
