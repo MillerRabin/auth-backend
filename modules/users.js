@@ -311,7 +311,7 @@ exports.update = async ({ connection, id, data }) => {
         vals.push(`password = crypt($${ params.push(data.newPassword) }, gen_salt('md5'))`);
     }
     if (vals.length == 0) throw new response.Error({message: 'there are no valid fields' });
-
+    vals.push('update_time = now()');
     const dbQuery = {
         text: `update users set ${ vals.join(', ')} where id = $1`,
         values: params
