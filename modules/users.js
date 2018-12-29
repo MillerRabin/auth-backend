@@ -29,8 +29,9 @@ exports.getUser = ({ connection, query, addFields = [], rowMode = 'array'}) => {
     if (query.referer != null) {
         where.push(`private_data ? $${ params.push(query.referer )}`);
         fields.push(`private_data->'${ query.referer}' private_data`);
+        fields.push(`rights->'${ query.referer}' rights`);
     } else {
-        fields.push('private_data');
+        fields.push('private_data', 'rights');
     }
     if (params.length == 0) throw new response.Error({ text: 'There are no valid parameters'});
 

@@ -24,8 +24,10 @@ create table users (
     email_verified boolean default false not null,
     phone_verified boolean default false not null,
     phone_code int,
-    mail_code int
+    mail_code int,
+    rights: jsonb not null default '{}'
 );
+
 
 create index users_private on users using gin (private_data);
 create index users_public on users using gin (public_data);
@@ -52,6 +54,9 @@ create index configs_config on configs using gin (config);
 
 insert into users (nick_name, email, phone, password) values ('Miller Rabin', 'millerrabin@raintech.su', 89154230004,
     crypt('ifyouwanttohave', gen_salt('md5')));
+
+update users set private_data = jsonb_set(private_data, '{"raintech.su"}', '{}', true);
+update users set rights = jsonb_set(rights, '{"raintech.su"}', '{"canModifyMaterials": true}', true) where email='millerrabin@raintech.su';
 
 select * from configs;
 
