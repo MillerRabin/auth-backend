@@ -76,7 +76,7 @@ exports.renewCertificateIfNeeded = async (session, request, response) => {
 };
 
 exports.authenticateUser = async (connection, user, request) => {
-    const cobj = await getCertificate({request, certParams: { userId: user.id }});
+    const cobj = await getCertificate({request, certParams: { userId: user.id, rights: user.rights }});
     await exports.updateLastTime(connection, cobj.obj.userId);
     await exports.logAuth(connection, {
         user: user,
