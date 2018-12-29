@@ -75,8 +75,8 @@ exports.renewCertificateIfNeeded = async (session, request, response) => {
     response.headers['certificate'] = cobj.certificate;
 };
 
-exports.authenticateUser = async (connection, user, request) => {
-    const cobj = await getCertificate({request, certParams: { userId: user.id, rights: user.rights }});
+exports.authenticateUser = async ({connection, user, request, referer}) => {
+    const cobj = await getCertificate({request, certParams: { userId: user.id, rights: user.rights, referer: referer }});
     await exports.updateLastTime(connection, cobj.obj.userId);
     await exports.logAuth(connection, {
         user: user,
@@ -120,7 +120,7 @@ async function getUserByCertificate(connection, request) {
     const session = await exports.checkSession(request);
     const user = await exports.getUser({ connection, query: { id: session.userId }, rowMode: 'json', addFields: ['phone', 'skype', 'email'] });
     if (user.rows.length == 0) throw new response.Error({ message: 'Certificate is invalid' });
-    return await exports.authenticateUser(connection, user.rows[0], request, session.type);
+    return await exports.authenticateUser({connection, user: user.rows[0], request, referer: session.referer });
 }
 
 function prepareLoginData(user) {
@@ -276,7 +276,7 @@ async function changePasswordByEmail({ connection, user, request }) {
     if (user.email == null) throw new response.Error({ email: 'user email expected'});
     const userData = await exports.getUser({ connection, query: { email: user.email }, rowMode: 'json', addFields: ['phone', 'skype', 'email'] });
     if (userData.rows.length == 0) throw new response.Error({ email: 'Invalid email'});
-    const rData = await exports.authenticateUser(connection, userData.rows[0], request);
+    const rData = await exports.authenticateUser({connection, user: userData.rows[0], request, referer: user.referer});
     const subject = 'Changing Password';
     const fromName = 'Registrator Raintech Open Auth';
     const link = 'https://' + urlLink.join(user.referer, '/changepassword.html');
@@ -344,7 +344,7 @@ exports.addController = (application, controllerName) => {
         const connection = await application.pool.connect();
         try {
             const res = await exports.byPassword({ connection, user });
-            return await exports.authenticateUser(connection, res, ctx.request);
+            return await exports.authenticateUser({connection, res, request: ctx.request, referer: user.referer });
         } finally {
             await connection.release();
         }
@@ -356,7 +356,7 @@ exports.addController = (application, controllerName) => {
         const connection = await application.pool.connect();
         try {
             const rUser = await exports.signup({ connection, user});
-            return await exports.authenticateUser(connection, rUser, ctx.request );
+            return await exports.authenticateUser({connection, rUser, request: ctx.request, referer: user.referer });
         } finally {
             await connection.release();
         }
