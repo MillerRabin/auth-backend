@@ -344,7 +344,7 @@ exports.addController = (application, controllerName) => {
         const connection = await application.pool.connect();
         try {
             const res = await exports.byPassword({ connection, user });
-            return await exports.authenticateUser({connection, res, request: ctx.request, referer: user.referer });
+            return await exports.authenticateUser({connection, user: res, request: ctx.request, referer: user.referer });
         } finally {
             await connection.release();
         }
@@ -356,7 +356,7 @@ exports.addController = (application, controllerName) => {
         const connection = await application.pool.connect();
         try {
             const rUser = await exports.signup({ connection, user});
-            return await exports.authenticateUser({connection, rUser, request: ctx.request, referer: user.referer });
+            return await exports.authenticateUser({connection, user: rUser, request: ctx.request, referer: user.referer });
         } finally {
             await connection.release();
         }
