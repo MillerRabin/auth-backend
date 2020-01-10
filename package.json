@@ -14,17 +14,18 @@
   "license": "ISC",
   "homepage": "https://bitbucket.org/raintechteam/auth-backend#readme",
   "dependencies": {
-    "koa": "^2.5.1",
-    "koa-body": "^4.0.4",
+    "intention-storage": "^0.1.6",
+    "koa": "^2.11.0",
+    "koa-body": "^4.1.1",
     "koa-router": "^7.4.0",
     "koa-static": "^5.0.0",
-    "koa2-cors": "^2.0.5",
+    "koa2-cors": "^2.0.6",
     "mkdirp-promise": "^5.0.1",
-    "moment": "^2.22.2",
-    "mustache": "^2.3.1",
-    "node-rsa": "^1.0.0",
-    "nodemailer": "^4.6.7",
+    "moment": "^2.24.0",
+    "mustache": "^2.3.2",
+    "node-rsa": "^1.0.7",
+    "nodemailer": "^4.7.0",
     "nodemailer-smtp-transport": "^2.7.4",
-    "pg": "^7.4.3"
+    "pg": "^7.17.0"
   }
 }
