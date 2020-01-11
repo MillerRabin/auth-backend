@@ -1,3 +1,8 @@
+create database auth;
+create user master;
+grant all on database ci to master;
+alter user master password 'your-password-here';
+
 create extension ltree;
 create extension pgcrypto;
 create extension postgis;
