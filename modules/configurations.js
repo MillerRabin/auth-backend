@@ -31,6 +31,12 @@ function createStream(config) {
     zip.file('private.pem', config.private);
     zip.file('data.json', JSON.stringify(config.data));
     zip.file('certificate.b64', JSON.stringify(config.certificate));
+    zip.file('configuration.json', JSON.stringify({
+        id: config.id,
+        public: config.public,
+        private: config.private,
+        data: config.data
+    }));
     return zip.generateNodeStream({type:'nodebuffer',streamFiles:false});
 }
 
