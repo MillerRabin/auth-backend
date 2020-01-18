@@ -9,6 +9,7 @@ const cors = require('koa2-cors');
 const { Pool } = require('pg');
 const users = require('./modules/users.js');
 const certificate = require('./modules/certificate.js');
+const configurations = require('./modules/configurations.js');
 require('./modules/iAuth.js');
 
 const response = require('./middlewares/response.js');
@@ -26,6 +27,7 @@ application.use(response.koa);
 
 users.addController(application, 'api/users');
 certificate.addController(application, 'api/certificate');
+configurations.addController(application, 'api/configurations');
 
 function createServer(application, port) {
     return new Promise((resolve, reject) => {

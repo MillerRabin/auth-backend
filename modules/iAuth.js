@@ -2,12 +2,12 @@ const { IntentionStorage } = require('intention-storage');
 const intentionStorage = new IntentionStorage();
 
 async function addLink() {
-    const link = intentionStorage.addLink([{ name: 'WebAddress', value: 'node.raintech.su'}]);
+    const link = intentionStorage.addLink([{ name: 'WebAddress', value: 'localhost'}]);
     await link.waitConnection();
     console.log(`Connected to node ${link.socket.url}`);
 }
 
-function onAuthData(status, intention, value) {
+async function onAuthData(status, intention, value) {
     console.log(status, intention, value);
 }
 
@@ -16,11 +16,12 @@ function createIntention() {
         title: 'Can authenticate user',
         input: 'authData',
         output: 'token',
-        onAuthData
+        onData: onAuthData
     })
 }
 
 async function init() {
+    await intentionStorage.createServer({ address: 'localhost', port: '10011'});
     await addLink();
     createIntention();
 }

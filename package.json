@@ -14,7 +14,8 @@
   "license": "ISC",
   "homepage": "https://bitbucket.org/raintechteam/auth-backend#readme",
   "dependencies": {
-    "intention-storage": "^0.1.6",
+    "intention-storage": "^0.1.10",
+    "jszip": "^3.2.2",
     "koa": "^2.11.0",
     "koa-body": "^4.1.1",
     "koa-router": "^7.4.0",
@@ -26,6 +27,7 @@
     "node-rsa": "^1.0.7",
     "nodemailer": "^4.7.0",
     "nodemailer-smtp-transport": "^2.7.4",
-    "pg": "^7.17.0"
+    "pg": "^7.17.1",
+    "uuid": "^3.4.0"
   }
 }
