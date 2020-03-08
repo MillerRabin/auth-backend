@@ -3,6 +3,7 @@ const Router = require('koa-router');
 const koaBody = require('koa-body');
 const certificate = require('./certificate.js');
 const Zip = require('jszip');
+const uuid = require('uuid');
 
 function checkKeys(data) {
     const hasPublic = data.public != null;
@@ -14,15 +15,26 @@ function checkKeys(data) {
     throw new Error('The key pair is wrong');
 }
 
-exports.createConfiguration = (conf = {}) => {
+function loadConf(conf) {
     if (!checkKeys(conf))
         Object.assign(conf, certificate.generateKeys());
-    if (conf.data == null)
+    if (conf.certificate == null) {
+        conf.id = uuid.v4();
         return conf;
+    }
+
     const rsa = new NodeRSA(conf.private);
-    rsa.importKey(conf.public, 'pkcs8-public-pem');
-    conf.certificate = rsa.encryptPrivate(conf, 'base64');
-    return conf;
+    return rsa.decrypt(conf.certificate, 'base64');
+}
+
+exports.createConfiguration = (conf = {}) => {
+    const nConf = loadConf(conf);
+    if (nConf.data == null)
+        return nConf;
+    const rsa = new NodeRSA(nConf.private);
+    rsa.importKey(nConf.public, 'pkcs8-public-pem');
+    nConf.certificate = rsa.encryptPrivate(nConf, 'base64');
+    return nConf;
 };
 
 function createStream(config) {
