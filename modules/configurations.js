@@ -14,7 +14,7 @@ function checkKeys(data) {
     throw new Error('The key pair is wrong');
 }
 
-function createConfiguration(conf) {
+exports.createConfiguration = (conf = {}) => {
     if (!checkKeys(conf))
         Object.assign(conf, certificate.generateKeys());
     if (conf.data == null)
@@ -23,7 +23,7 @@ function createConfiguration(conf) {
     rsa.importKey(conf.public, 'pkcs8-public-pem');
     conf.certificate = rsa.encryptPrivate(conf, 'base64');
     return conf;
-}
+};
 
 function createStream(config) {
     const zip = new Zip();
@@ -45,7 +45,7 @@ exports.addController = (application, controllerName) => {
 
     router.post('/' + controllerName + '/get', koaBody(), async (ctx) => {
         const data = ctx.request.body;
-        const config = createConfiguration(data);
+        const config = exports.createConfiguration(data);
         ctx.body = createStream(config);
     });
 
