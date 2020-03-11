@@ -24,7 +24,7 @@ function startSendingConfigurations(intentionStorage) {
 
 async function init() {
     await intentionStorage.createServer({ address: 'localhost', port: '10011'});
-    await addLink();
+    addLink();
     startSendingConfigurations(intentionStorage);
 }
 
