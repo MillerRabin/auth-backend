@@ -2,6 +2,11 @@ const { IntentionStorage } = require('intention-storage');
 const configurations = require('./configurations.js');
 const intentionStorage = new IntentionStorage();
 
+const address = {
+    address: 'localhost',
+    port: 10011
+};
+
 async function addLink() {
     const link = intentionStorage.addLink([{ name: 'WebAddress', value: 'node.raintech.su'}]);
     await link.waitConnection();
@@ -10,20 +15,20 @@ async function addLink() {
 
 function startSendingConfigurations(intentionStorage) {
     return intentionStorage.createIntention({
-        title: 'Can authenticate device',
+        title: 'Can create auth keys',
         input: 'AuthData',
-        output: 'AuthConfiguration',
-        onData: async function (status, intention, value) {
+        output: 'AuthKeys',
+        onData: async function (status, intention) {
             if (status == 'accepted') {
-                const config = configurations.createConfiguration(value);
-                intention.send('authConfiguration', this, config);
+                const config = configurations.createKeys();
+                intention.send('data', this, config);
             }
         }
     });
 }
 
 async function init() {
-    await intentionStorage.createServer({ address: 'localhost', port: '10011'});
+    await intentionStorage.createServer(address);
     addLink();
     startSendingConfigurations(intentionStorage);
 }
