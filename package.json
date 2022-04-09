@@ -22,7 +22,7 @@
     "koa-static": "^5.0.0",
     "koa2-cors": "^2.0.6",
     "mkdirp-promise": "^5.0.1",
-    "moment": "^2.24.0",
+    "moment": "^2.29.2",
     "mustache": "^2.3.2",
     "node-rsa": "^1.0.7",
     "nodemailer": "^4.7.0",
